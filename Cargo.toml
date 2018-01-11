@@ -1,0 +1,6 @@
+[package]
+name = "hostesaft"
+version = "0.1.0"
+authors = ["Sigurd Kolltveit <sigurd.kolltveit@gmx.com>"]
+
+[dependencies]
