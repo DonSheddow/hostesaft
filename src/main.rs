@@ -1,12 +1,54 @@
 extern crate reqwest;
 extern crate clap;
 
-use reqwest::{Client, RedirectPolicy};
-use reqwest::header::Host;
+use reqwest::{Client, RedirectPolicy, StatusCode};
+use reqwest::header::{self, Headers, Host};
 use clap::{App, Arg};
 use std::io::{self, BufRead};
 use std::fs::File;
 use std::io::Error;
+use std::fmt;
+
+
+struct Response {
+    body: String,
+    status: StatusCode,
+    headers: Headers,
+}
+
+
+impl Response {
+    fn new(mut resp: reqwest::Response) -> Self {
+        Response {
+            body: resp.text().unwrap_or("".to_string()),
+            status: resp.status(),
+            headers: resp.headers().clone(),
+        }
+    }
+
+    fn is_equal_to(&self, other: &Response) -> bool {
+        if self.status != other.status {
+            return false;
+        }
+        if self.status.is_redirection() {
+            return self.headers.get::<header::Location>().unwrap()
+                == other.headers.get::<header::Location>().unwrap();
+        }
+
+        self.body == other.body
+    }
+}
+
+impl fmt::Display for Response {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.status.is_redirection() {
+            write!(f, "{} -> {}", self.status, self.headers.get::<header::Location>().unwrap())
+        }
+        else {
+            write!(f, "{}", self.status)
+        }
+    }
+}
 
 
 fn main() {
@@ -32,25 +74,33 @@ fn main() {
 
     let client = reqwest::Client::builder()
         .redirect(RedirectPolicy::none())
+        .danger_disable_hostname_verification()
         .build().unwrap();
 
+    let default_resp = get_url(&client, url, "non-existing.host".to_string()).unwrap();
+
     for host in hosts {
-        let res = get_url(&client, url, host.clone()).unwrap();
-        if res.status().is_redirection() {
-            println!("{}:\n\t{} -> {}", host, res.status(), res.headers().get::<reqwest::header::Location>().unwrap());
+        let trivial_resp = get_url(&client, &format!("https://{}", &host), host.clone())
+            .or_else(|_| get_url(&client, &format!("http://{}", &host), host.clone())).unwrap();
+
+        let resp = get_url(&client, url, host.clone()).unwrap();
+        let alert = if !resp.is_equal_to(&default_resp) && !resp.is_equal_to(&trivial_resp) {
+            "[!!] "
         }
         else {
-            println!("{}:\n\t{}", host, res.status());
-        }
+            ""
+        };
+        print!("{}{}\n\t", alert, host);
+        println!("{}", resp);
     }
 
 }
 
 
-fn get_url(client: &Client, url: &str, host: String) -> Result<reqwest::Response, reqwest::Error> {
+fn get_url(client: &Client, url: &str, host: String) -> reqwest::Result<Response> {
     let resp = client.get(url)
         .header(Host::new(host, None))
         .send()?;
 
-    Ok(resp)
+    Ok(Response::new(resp))
 }
