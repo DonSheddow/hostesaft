@@ -26,6 +26,14 @@ impl Response {
         }
     }
 
+    fn sentinel() -> Self {
+        Response {
+            body: "".to_string(),
+            status: StatusCode::Unregistered(0),
+            headers: Headers::new(),
+        }
+    }
+
     fn is_equal_to(&self, other: &Response) -> bool {
         if self.status != other.status {
             return false;
@@ -81,7 +89,8 @@ fn main() {
 
     for host in hosts {
         let trivial_resp = get_url(&client, &format!("https://{}", &host), host.clone())
-            .or_else(|_| get_url(&client, &format!("http://{}", &host), host.clone())).unwrap();
+            .or_else(|_| get_url(&client, &format!("http://{}", &host), host.clone()))
+            .unwrap_or_else(|_| Response::sentinel());
 
         let resp = get_url(&client, url, host.clone()).unwrap();
         let alert = if !resp.is_equal_to(&default_resp) && !resp.is_equal_to(&trivial_resp) {
