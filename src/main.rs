@@ -8,6 +8,7 @@ use std::io::{self, BufRead};
 use std::fs::File;
 use std::io::Error;
 
+
 fn main() {
     let matches = App::new("Hostesaft")
                           .version("1.0")
@@ -35,16 +36,21 @@ fn main() {
 
     for host in hosts {
         let res = get_url(&client, url, host.clone()).unwrap();
-        println!("{}: {}", host, res);
+        if res.status().is_redirection() {
+            println!("{}:\n\t{} -> {}", host, res.status(), res.headers().get::<reqwest::header::Location>().unwrap());
+        }
+        else {
+            println!("{}:\n\t{}", host, res.status());
+        }
     }
 
 }
 
 
-fn get_url(client: &Client, url: &str, host: String) -> Result<String, reqwest::Error> {
+fn get_url(client: &Client, url: &str, host: String) -> Result<reqwest::Response, reqwest::Error> {
     let resp = client.get(url)
         .header(Host::new(host, None))
         .send()?;
 
-    Ok(resp.status().to_string())
+    Ok(resp)
 }
